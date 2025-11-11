@@ -10,6 +10,7 @@ import { Sidebar } from './components/Sidebar/Sidebar';
 import { UserManagementPanel } from './components/UserManagement/UserManagementPanel';
 import { TopBar } from './components/Layout/TopBar';
 import { motion, AnimatePresence } from 'framer-motion';
+import { ReactFlowProvider } from 'reactflow';
 
 const AppContent: React.FC = () => {
   const { state, setUsers, setLoading, setError, setDraggingHobby, setSelectedUser } = useGraph();
@@ -104,7 +105,9 @@ const AppContent: React.FC = () => {
 export const App: React.FC = () => {
   return (
     <ErrorBoundary>
-      <AppContent />
+      <ReactFlowProvider>
+        <AppContent />
+      </ReactFlowProvider>
     </ErrorBoundary>
   );
 };
