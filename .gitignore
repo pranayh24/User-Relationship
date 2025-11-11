@@ -1,0 +1,106 @@
+HELP.md
+target/
+.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+.env
+
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+yarn.lock
+.npm
+.eslintcache
+dist/
+build/
+
+frontend/user-relationship-frontend/node_modules/
+frontend/user-relationship-frontend/build/
+frontend/user-relationship-frontend/dist/
+frontend/user-relationship-frontend/.env.local
+frontend/user-relationship-frontend/.env.development.local
+frontend/user-relationship-frontend/.env.test.local
+frontend/user-relationship-frontend/.env.production.local
+
+### OS ###
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+### STS ###
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+
+### IntelliJ IDEA ###
+.idea
+*.iws
+*.iml
+*.ipr
+
+### NetBeans ###
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+build/
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+### VS Code ###
+.vscode/
+
+### Temporary Files ###
+*.log
+*.tmp
+*.temp
+*.bak
+*~
+.#*
+
+### IDE ###
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+### Environment ###
+.env.local
+.env.*.local
+
+### Maven ###
+.mvn/
+*.jar
+!.mvn/wrapper/maven-wrapper.jar
+
+### Gradle ###
+.gradle/
+gradle/
+
+### Docker ###
+.dockerignore
+docker-compose.override.yml
+
+### Testing ###
+coverage/
+.nyc_output/
+junit.xml
+
+### Build outputs ###
+out/
+.cache/
+.parcel-cache/
