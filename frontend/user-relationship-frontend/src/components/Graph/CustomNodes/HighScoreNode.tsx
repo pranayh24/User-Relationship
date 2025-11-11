@@ -7,35 +7,58 @@ interface HighScoreNodeProps {
     label: string;
     age: number;
     popularityScore: number;
+    onMouseDown?: (e: React.MouseEvent) => void;
+    onMouseEnter?: (e: React.MouseEvent) => void;
+    onMouseLeave?: (e: React.MouseEvent) => void;
+    onDrop?: (e: React.DragEvent) => void;
+    isDragged?: boolean;
+    isHovered?: boolean;
   };
   isConnecting?: boolean;
   selected?: boolean;
 }
 
-export const HighScoreNode: React.FC<HighScoreNodeProps> = ({ data, isConnecting, selected }) => {
+export const HighScoreNode: React.FC<HighScoreNodeProps> = ({
+  data,
+  isConnecting,
+  selected
+}) => {
   const scorePercentage = Math.min((data.popularityScore / 10) * 100, 100);
+  const isDragged = data.isDragged || false;
+  const isHovered = data.isHovered || false;
 
   return (
     <motion.div
       initial={{ scale: 0.8, opacity: 0 }}
-      animate={{ scale: 1, opacity: 1 }}
+      animate={{ scale: isDragged ? 1.1 : isHovered ? 1.05 : 1, opacity: 1 }}
       exit={{ scale: 0.8, opacity: 0 }}
       transition={{ duration: 0.3 }}
-      className={`px-4 py-3 rounded-lg shadow-lg border-2 transition-all ${
-        selected
+      onMouseDown={data.onMouseDown}
+      onMouseEnter={data.onMouseEnter}
+      onMouseLeave={data.onMouseLeave}
+      onDragOver={(e) => e.preventDefault()}
+      onDrop={data.onDrop}
+      className={`px-4 py-3 rounded-lg shadow-lg border-2 transition-all cursor-move ${
+        isDragged
+          ? 'border-blue-500 bg-blue-100 ring-2 ring-blue-400 shadow-xl'
+          : isHovered
+          ? 'border-purple-500 bg-purple-50 ring-2 ring-purple-300 shadow-lg'
+          : selected
           ? 'border-yellow-500 bg-yellow-100 ring-2 ring-yellow-300'
           : 'border-green-400 bg-green-50'
       } ${isConnecting ? 'opacity-50' : 'opacity-100'}`}
       style={{
         minWidth: '160px',
-        boxShadow: `0 0 ${scorePercentage / 10}px rgba(34, 197, 94, ${scorePercentage / 100})`,
+        boxShadow: isDragged
+          ? `0 0 20px rgba(59, 130, 246, 0.8)`
+          : isHovered
+          ? `0 0 15px rgba(168, 85, 247, 0.6)`
+          : `0 0 ${scorePercentage / 10}px rgba(34, 197, 94, ${scorePercentage / 100})`,
       }}
     >
-      {/* Connection handles - allow both incoming and outgoing connections */}
+      {/* Connection handles */}
       <Handle type="target" position={Position.Top} isConnectable={true} />
       <Handle type="source" position={Position.Bottom} isConnectable={true} />
-
-      {/* Invisible side handles for additional connection options */}
       <Handle type="target" position={Position.Left} isConnectable={true} style={{ opacity: 0 }} />
       <Handle type="source" position={Position.Right} isConnectable={true} style={{ opacity: 0 }} />
 
@@ -61,6 +84,17 @@ export const HighScoreNode: React.FC<HighScoreNodeProps> = ({ data, isConnecting
         <div className="text-xs font-semibold text-green-700 mt-1">
           ⭐ Popular
         </div>
+
+        {/* Dragging indicator */}
+        {isDragged && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="text-xs font-bold text-blue-600 mt-1"
+          >
+            Dragging...
+          </motion.div>
+        )}
       </div>
     </motion.div>
   );

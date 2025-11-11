@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import ReactFlow, {
   Node,
   Edge,
@@ -8,6 +8,7 @@ import ReactFlow, {
   useEdgesState,
   NodeTypes,
   Connection,
+  useReactFlow,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { useGraph } from '../../context/GraphContext';
@@ -33,6 +34,9 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({ onNodeSelect, dragging
   const { addNotification } = useNotification();
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+  const [draggedNode, setDraggedNode] = useState<string | null>(null);
+  const [hoveredNode, setHoveredNode] = useState<string | null>(null);
+  const { getNode } = useReactFlow();
 
   // Initialize nodes from users
   React.useEffect(() => {
@@ -46,7 +50,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({ onNodeSelect, dragging
         popularityScore: user.popularityScore,
       },
       position: positions[index] || { x: Math.random() * 500, y: Math.random() * 500 },
-      draggable: true,  // ✅ Enable node dragging
+      draggable: true,
     }));
     setNodes(newNodes);
   }, [state.users, setNodes]);
@@ -74,14 +78,12 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({ onNodeSelect, dragging
     setEdges(newEdges);
   }, [state.users, setEdges]);
 
-  // ✅ Validate connection - prevent self-loops and duplicate connections
+  // Validate connection
   const isValidConnection = useCallback((connection: Connection): boolean => {
-    // Prevent connecting node to itself
     if (connection.source === connection.target) {
       return false;
     }
 
-    // Prevent duplicate connections
     const existingEdge = edges.find(
       (edge) =>
         (edge.source === connection.source && edge.target === connection.target) ||
@@ -91,24 +93,20 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({ onNodeSelect, dragging
     return !existingEdge;
   }, [edges]);
 
+  // Enhanced connection handler
   const onConnect = useCallback(
     async (connection: Connection) => {
       if (!connection.source || !connection.target) return;
 
-      // ✅ Validate connection before attempting to link
       if (!isValidConnection(connection)) {
-        addNotification('Users are already connected or invalid connection', 'warning');
+        addNotification('Users are already connected', 'warning');
         return;
       }
 
       try {
-        // Link users on backend
         await userAPI.linkUsers(connection.source, connection.target);
-
-        // Fetch fresh graph data to ensure all relationships are properly synced
         const graphData = await userAPI.getGraphData();
         setUsers(graphData.users);
-
         addNotification('✅ Users linked successfully!', 'success');
       } catch (error: any) {
         const errorMsg = error.message || 'Failed to link users';
@@ -117,6 +115,52 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({ onNodeSelect, dragging
       }
     },
     [setUsers, addNotification, isValidConnection]
+  );
+
+  // Handle node drag start for visual feedback
+  const handleNodeMouseDown = useCallback((nodeId: string) => {
+    setDraggedNode(nodeId);
+  }, []);
+
+  // Handle node hover for connection preview
+  const handleNodeMouseEnter = useCallback((nodeId: string) => {
+    if (draggedNode && draggedNode !== nodeId) {
+      setHoveredNode(nodeId);
+    }
+  }, [draggedNode]);
+
+  const handleNodeMouseLeave = useCallback(() => {
+    setHoveredNode(null);
+  }, []);
+
+  // Handle drop on node to create relationship
+  const handleNodeDrop = useCallback(
+    async (targetNodeId: string) => {
+      if (!draggedNode || draggedNode === targetNodeId) {
+        setDraggedNode(null);
+        return;
+      }
+
+      // Check if already connected
+      if (!isValidConnection({ source: draggedNode, target: targetNodeId })) {
+        addNotification('Users are already connected', 'warning');
+        setDraggedNode(null);
+        return;
+      }
+
+      try {
+        await userAPI.linkUsers(draggedNode, targetNodeId);
+        const graphData = await userAPI.getGraphData();
+        setUsers(graphData.users);
+        addNotification('✅ Users linked successfully!', 'success');
+      } catch (error: any) {
+        addNotification(error.message || 'Failed to link users', 'error');
+      } finally {
+        setDraggedNode(null);
+        setHoveredNode(null);
+      }
+    },
+    [draggedNode, isValidConnection, setUsers, addNotification]
   );
 
   const handleDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
@@ -186,7 +230,18 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({ onNodeSelect, dragging
       onDrop={handleDrop}
     >
       <ReactFlow
-        nodes={nodes}
+        nodes={nodes.map((node) => ({
+          ...node,
+          data: {
+            ...node.data,
+            onMouseDown: () => handleNodeMouseDown(node.id),
+            onMouseEnter: () => handleNodeMouseEnter(node.id),
+            onMouseLeave: handleNodeMouseLeave,
+            onDrop: () => handleNodeDrop(node.id),
+            isDragged: draggedNode === node.id,
+            isHovered: hoveredNode === node.id,
+          },
+        }))}
         edges={edges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
@@ -201,14 +256,37 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({ onNodeSelect, dragging
       </ReactFlow>
 
       {/* Connection Instructions */}
-      <div className="absolute top-6 left-6 bg-white rounded-lg shadow-lg p-3 max-w-xs">
-        <p className="text-sm font-semibold text-gray-800 mb-2">📌 How to Connect Users:</p>
-        <ul className="text-xs text-gray-600 space-y-1">
-          <li>• Drag from one user node to another</li>
-          <li>• Or click and hold a handle to connect</li>
-          <li>• Connections are bidirectional (mutual)</li>
+      <div className="absolute top-6 left-6 bg-white rounded-lg shadow-lg p-4 max-w-sm">
+        <p className="text-sm font-semibold text-gray-800 mb-3">📌 How to Connect Users:</p>
+        <ul className="text-xs text-gray-600 space-y-2">
+          <li>✓ <strong>Method 1:</strong> Drag one node directly onto another node</li>
+          <li>✓ <strong>Method 2:</strong> Drag from a handle at the bottom of a node to another node's handle</li>
+          <li>✓ Connections are bidirectional (mutual)</li>
+          <li>✓ Can't connect a user to themselves</li>
         </ul>
       </div>
+
+      {/* Connection Preview Line */}
+      {draggedNode && hoveredNode && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="absolute inset-0 pointer-events-none"
+        >
+          <svg className="w-full h-full">
+            <line
+              x1={getNode(draggedNode)?.position.x || 0}
+              y1={getNode(draggedNode)?.position.y || 0}
+              x2={getNode(hoveredNode)?.position.x || 0}
+              y2={getNode(hoveredNode)?.position.y || 0}
+              stroke="#3b82f6"
+              strokeWidth="2"
+              strokeDasharray="5,5"
+              opacity="0.6"
+            />
+          </svg>
+        </motion.div>
+      )}
 
       {/* Stats Overlay */}
       <div className="absolute bottom-6 right-6 bg-white rounded-lg shadow-lg p-4 max-w-xs">
@@ -236,6 +314,17 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({ onNodeSelect, dragging
           className="absolute top-6 left-1/2 transform -translate-x-1/2 bg-blue-600 text-white px-4 py-2 rounded-lg shadow-lg"
         >
           Drop "{draggingHobby}" on a user node
+        </motion.div>
+      )}
+
+      {/* Dragging Feedback */}
+      {draggedNode && (
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="absolute top-20 left-1/2 transform -translate-x-1/2 bg-indigo-600 text-white px-4 py-2 rounded-lg shadow-lg"
+        >
+          🔗 Drag to another node to connect
         </motion.div>
       )}
     </motion.div>
