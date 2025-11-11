@@ -93,6 +93,15 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({ onNodeSelect, dragging
     return !existingEdge;
   }, [edges]);
 
+  // Helper function to check if two nodes are already connected
+  const areNodesConnected = useCallback((nodeId1: string, nodeId2: string): boolean => {
+    return edges.some(
+      (edge) =>
+        (edge.source === nodeId1 && edge.target === nodeId2) ||
+        (edge.source === nodeId2 && edge.target === nodeId1)
+    );
+  }, [edges]);
+
   // Enhanced connection handler
   const onConnect = useCallback(
     async (connection: Connection) => {
