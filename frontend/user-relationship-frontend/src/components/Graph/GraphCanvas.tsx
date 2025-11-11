@@ -142,7 +142,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({ onNodeSelect, dragging
       }
 
       // Check if already connected
-      if (!isValidConnection({ source: draggedNode, target: targetNodeId })) {
+      if (areNodesConnected(draggedNode, targetNodeId)) {
         addNotification('Users are already connected', 'warning');
         setDraggedNode(null);
         return;
@@ -160,7 +160,7 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({ onNodeSelect, dragging
         setHoveredNode(null);
       }
     },
-    [draggedNode, isValidConnection, setUsers, addNotification]
+    [draggedNode, areNodesConnected, setUsers, addNotification]
   );
 
   const handleDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
