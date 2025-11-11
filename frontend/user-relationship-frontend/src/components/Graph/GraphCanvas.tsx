@@ -8,7 +8,6 @@ import ReactFlow, {
   useEdgesState,
   NodeTypes,
   Connection,
-  isEdge,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { useGraph } from '../../context/GraphContext';
