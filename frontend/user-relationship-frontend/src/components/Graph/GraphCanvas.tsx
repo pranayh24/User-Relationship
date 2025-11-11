@@ -1,0 +1,244 @@
+import React, { useCallback } from 'react';
+import ReactFlow, {
+  Node,
+  Edge,
+  Controls,
+  Background,
+  useNodesState,
+  useEdgesState,
+  NodeTypes,
+  Connection,
+  isEdge,
+} from 'reactflow';
+import 'reactflow/dist/style.css';
+import { useGraph } from '../../context/GraphContext';
+import { useNotification } from '../../context/NotificationContext';
+import { userAPI } from '../../services/api';
+import { HighScoreNode } from './CustomNodes/HighScoreNode';
+import { LowScoreNode } from './CustomNodes/LowScoreNode';
+import { generateGraphLayout } from '../../utils/helpers';
+import { motion } from 'framer-motion';
+
+const nodeTypes: NodeTypes = {
+  highScore: HighScoreNode as any,
+  lowScore: LowScoreNode as any,
+};
+
+interface GraphCanvasProps {
+  onNodeSelect: (userId: string) => void;
+  draggingHobby: string | null;
+}
+
+export const GraphCanvas: React.FC<GraphCanvasProps> = ({ onNodeSelect, draggingHobby }) => {
+  const { state, updateUser, setUsers } = useGraph();
+  const { addNotification } = useNotification();
+  const [nodes, setNodes, onNodesChange] = useNodesState([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+
+  // Initialize nodes from users
+  React.useEffect(() => {
+    const positions = generateGraphLayout(state.users.length, 1200, 800);
+    const newNodes: Node[] = state.users.map((user, index) => ({
+      id: user.id,
+      type: user.popularityScore > 5 ? 'highScore' : 'lowScore',
+      data: {
+        label: user.username,
+        age: user.age,
+        popularityScore: user.popularityScore,
+      },
+      position: positions[index] || { x: Math.random() * 500, y: Math.random() * 500 },
+      draggable: true,  // ✅ Enable node dragging
+    }));
+    setNodes(newNodes);
+  }, [state.users, setNodes]);
+
+  // Initialize edges from relationships
+  React.useEffect(() => {
+    const newEdges: Edge[] = [];
+    const addedPairs = new Set<string>();
+
+    state.users.forEach((user) => {
+      user.friends.forEach((friendId) => {
+        const pairKey = [user.id, friendId].sort().join('-');
+        if (!addedPairs.has(pairKey)) {
+          newEdges.push({
+            id: pairKey,
+            source: user.id,
+            target: friendId,
+            animated: true,
+          });
+          addedPairs.add(pairKey);
+        }
+      });
+    });
+
+    setEdges(newEdges);
+  }, [state.users, setEdges]);
+
+  // ✅ Validate connection - prevent self-loops and duplicate connections
+  const isValidConnection = useCallback((connection: Connection): boolean => {
+    // Prevent connecting node to itself
+    if (connection.source === connection.target) {
+      return false;
+    }
+
+    // Prevent duplicate connections
+    const existingEdge = edges.find(
+      (edge) =>
+        (edge.source === connection.source && edge.target === connection.target) ||
+        (edge.source === connection.target && edge.target === connection.source)
+    );
+
+    return !existingEdge;
+  }, [edges]);
+
+  const onConnect = useCallback(
+    async (connection: Connection) => {
+      if (!connection.source || !connection.target) return;
+
+      // ✅ Validate connection before attempting to link
+      if (!isValidConnection(connection)) {
+        addNotification('Users are already connected or invalid connection', 'warning');
+        return;
+      }
+
+      try {
+        // Link users on backend
+        await userAPI.linkUsers(connection.source, connection.target);
+
+        // Fetch fresh graph data to ensure all relationships are properly synced
+        const graphData = await userAPI.getGraphData();
+        setUsers(graphData.users);
+
+        addNotification('✅ Users linked successfully!', 'success');
+      } catch (error: any) {
+        const errorMsg = error.message || 'Failed to link users';
+        addNotification(errorMsg, 'error');
+        console.error('Connection error:', error);
+      }
+    },
+    [setUsers, addNotification, isValidConnection]
+  );
+
+  const handleDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    if (draggingHobby) {
+      (e.currentTarget as HTMLDivElement).style.backgroundColor = 'rgba(59, 130, 246, 0.1)';
+    }
+  }, [draggingHobby]);
+
+  const handleDragLeave = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    (e.currentTarget as HTMLDivElement).style.backgroundColor = '';
+  }, []);
+
+  const handleDrop = useCallback(
+    async (e: React.DragEvent<HTMLDivElement>) => {
+      e.preventDefault();
+      (e.currentTarget as HTMLDivElement).style.backgroundColor = '';
+
+      if (!draggingHobby) return;
+
+      const reactflowBounds = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
+      const x = e.clientX - reactflowBounds.left;
+      const y = e.clientY - reactflowBounds.top;
+
+      const nodeAtPosition = nodes.find((node) => {
+        if (!node.position) return false;
+        const distance = Math.sqrt(
+          Math.pow(node.position.x - x, 2) + Math.pow(node.position.y - y, 2)
+        );
+        return distance < 100;
+      });
+
+      if (!nodeAtPosition) {
+        addNotification('Drop hobby on a user node', 'warning');
+        return;
+      }
+
+      try {
+        const user = state.users.find((u) => u.id === nodeAtPosition.id);
+        if (!user) return;
+
+        if (user.hobbies.includes(draggingHobby)) {
+          addNotification('User already has this hobby', 'warning');
+          return;
+        }
+
+        const updated = await userAPI.updateUser(nodeAtPosition.id, {
+          hobbies: [...user.hobbies, draggingHobby],
+        });
+
+        updateUser(updated);
+        addNotification(`Added hobby "${draggingHobby}" to ${user.username}`, 'success');
+      } catch (error: any) {
+        addNotification(error.message || 'Failed to add hobby', 'error');
+      }
+    },
+    [draggingHobby, nodes, state.users, updateUser, addNotification]
+  );
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className="flex-1 relative bg-gradient-to-br from-blue-50 to-indigo-50 overflow-hidden"
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      <ReactFlow
+        nodes={nodes}
+        edges={edges}
+        onNodesChange={onNodesChange}
+        onEdgesChange={onEdgesChange}
+        onConnect={onConnect}
+        nodeTypes={nodeTypes}
+        onNodeClick={(_, node) => onNodeSelect(node.id)}
+        isValidConnection={isValidConnection}
+        fitView
+      >
+        <Background color="#aaa" gap={16} />
+        <Controls />
+      </ReactFlow>
+
+      {/* Connection Instructions */}
+      <div className="absolute top-6 left-6 bg-white rounded-lg shadow-lg p-3 max-w-xs">
+        <p className="text-sm font-semibold text-gray-800 mb-2">📌 How to Connect Users:</p>
+        <ul className="text-xs text-gray-600 space-y-1">
+          <li>• Drag from one user node to another</li>
+          <li>• Or click and hold a handle to connect</li>
+          <li>• Connections are bidirectional (mutual)</li>
+        </ul>
+      </div>
+
+      {/* Stats Overlay */}
+      <div className="absolute bottom-6 right-6 bg-white rounded-lg shadow-lg p-4 max-w-xs">
+        <h3 className="font-bold text-gray-900 mb-2">Graph Stats</h3>
+        <div className="space-y-1 text-sm text-gray-600">
+          <p>👥 Users: {state.users.length}</p>
+          <p>🔗 Connections: {edges.length}</p>
+          <p>
+            ⭐ Popular: {state.users.filter((u) => u.popularityScore > 5).length}
+          </p>
+          <p>
+            📊 Avg Score:{' '}
+            {state.users.length > 0
+              ? (state.users.reduce((sum, u) => sum + u.popularityScore, 0) / state.users.length).toFixed(1)
+              : '0'}
+          </p>
+        </div>
+      </div>
+
+      {/* Drag Hint */}
+      {draggingHobby && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="absolute top-6 left-1/2 transform -translate-x-1/2 bg-blue-600 text-white px-4 py-2 rounded-lg shadow-lg"
+        >
+          Drop "{draggingHobby}" on a user node
+        </motion.div>
+      )}
+    </motion.div>
+  );
+};
